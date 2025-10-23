@@ -24,7 +24,7 @@ variable "instance_name" {
 variable "machine_type" {
   description = "GCE Machine type"
   type        = string
-  default     = "n2-standard-2"
+  default     = "e2-standard-2"
 }
 
 variable "boot_disk_size_gb" {
