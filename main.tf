@@ -59,10 +59,7 @@ resource "google_compute_instance" "spark_single" {
     }
   }
 
-  metadata_startup_script = templatefile("${path.module}/scripts/install-spark.sh", {
-    spark_version = var.spark_version
-    spark_user    = var.spark_user
-  })
+  metadata_startup_script = file("${path.module}/scripts/install-spark.sh")
 
   service_account {
     scopes = ["cloud-platform"]
