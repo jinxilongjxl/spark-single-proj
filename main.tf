@@ -1,65 +1,59 @@
-# 1. 创建自定义VPC网络（禁用自动创建子网）
+# 1. 自定义VPC网络
 resource "google_compute_network" "spark_vpc" {
   name                    = var.vpc_name
-  auto_create_subnetworks = false  # 手动管理子网
+  auto_create_subnetworks = false
   description             = "Custom VPC for Spark cluster"
 }
 
-# 2. 在VPC下创建子网
+# 2. 子网配置
 resource "google_compute_subnetwork" "spark_subnet" {
   name          = var.subnet_name
-  network       = google_compute_network.spark_vpc.name  # 关联自定义VPC
-  ip_cidr_range = var.subnet_cidr  # 子网IP范围
+  network       = google_compute_network.spark_vpc.name
+  ip_cidr_range = var.subnet_cidr
   region        = var.region
 }
 
-# 3. 防火墙规则：允许内部通信+必要外部访问
+# 3. 防火墙规则（修复source_ranges重复问题）
 resource "google_compute_firewall" "spark_firewall" {
   name    = "spark-firewall"
-  network = google_compute_network.spark_vpc.name  # 关联自定义VPC
+  network = google_compute_network.spark_vpc.name
 
-  # 规则1：允许VPC内部所有节点通信（Spark节点间通信需要）
+  # 允许的端口：内部全端口通信 + 外部SSH(22)和Spark UI(8080)
   allow {
     protocol = "tcp"
-    ports    = ["0-65535"]
+    ports    = ["0-65535", "22", "8080"]  # 合并所有需要开放的端口
   }
-  source_ranges = [var.subnet_cidr]  # 仅允许子网内IP通信
 
-  # 规则2：允许外部访问SSH（22）和Spark Web UI（8080）
-  allow {
-    protocol = "tcp"
-    ports    = ["22", "8080"]
-  }
-  source_ranges = ["0.0.0.0/0"]  # 生产环境建议限制为特定IP
+  # 源IP范围：子网内部IP + 外部访问IP（合并为一个列表）
+  source_ranges = [
+    var.subnet_cidr,  # 子网内部通信
+    "0.0.0.0/0"       # 外部访问（生产环境建议限制IP）
+  ]
 }
 
-# 4. Spark虚拟机实例（单节点，含Master+Worker）
+# 4. Spark虚拟机实例（引用外部启动脚本）
 resource "google_compute_instance" "spark_node" {
   name         = var.vm_name
-  machine_type = "e2-standard-2"  # 2vCPU+8GB内存（适合小规模Spark）
+  machine_type = "e2-standard-2"
   zone         = var.zone
 
-  # 系统盘（Ubuntu 22.04）
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 50  # 50GB磁盘
+      size  = 50
     }
   }
 
-  # 网络接口：关联自定义子网，分配公网IP（可选）
   network_interface {
-    subnetwork = google_compute_subnetwork.spark_subnet.name  # 使用自定义子网
+    subnetwork = google_compute_subnetwork.spark_subnet.name
     access_config {
-      # 分配公网IP（用于外部访问，若仅内部使用可删除此段）
+      # 分配公网IP
     }
   }
 
-  # 启动脚本：安装Java、Spark并配置
-  metadata_startup_script = file("${path.module}/scripts/install-hadoop-worker.sh")
+  # 引用scripts目录下的安装脚本（相对路径）
+  metadata_startup_script = file("${path.module}/scripts/install-spark.sh")
 
-
-  # 依赖关系：先创建子网和防火墙
   depends_on = [
     google_compute_subnetwork.spark_subnet,
     google_compute_firewall.spark_firewall
