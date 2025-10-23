@@ -1,40 +1,46 @@
 variable "project_id" {
-  description = "GCP项目ID"
+  description = "GCP Project ID"
   type        = string
 }
 
 variable "region" {
-  description = "GCP区域"
+  description = "GCP Region"
   type        = string
-  default     = "asia-east1"
+  default     = "us-central1"
 }
 
 variable "zone" {
-  description = "GCP可用区"
+  description = "GCP Zone"
   type        = string
-  default     = "asia-east1-a"
+  default     = "us-central1-a"
 }
 
-variable "vpc_name" {
-  description = "自定义VPC名称"
+variable "instance_name" {
+  description = "Name of the single Spark node"
   type        = string
-  default     = "spark-vpc"
+  default     = "spark-single"
 }
 
-variable "subnet_name" {
-  description = "子网名称"
+variable "machine_type" {
+  description = "GCE Machine type"
   type        = string
-  default     = "spark-subnet"
+  default     = "n2-standard-4"
 }
 
-variable "subnet_cidr" {
-  description = "子网CIDR范围"
-  type        = string
-  default     = "10.0.0.0/24"  # 自定义IP段，避免与其他网络冲突
+variable "boot_disk_size_gb" {
+  description = "Boot disk size in GB"
+  type        = number
+  default     = 50
 }
 
-variable "vm_name" {
-  description = "Spark虚拟机名称"
+variable "spark_version" {
+  description = "Apache Spark version to install"
   type        = string
-  default     = "spark-node"
+  default     = "3.5.1"
+}
+
+variable "spark_user" {
+  description = "OS user that will run Spark"
+  type        = string
+  default     = "spark"
 }
