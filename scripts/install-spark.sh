@@ -1,15 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# >>> 1. 日志文件路径
+# >>> 1. 日志文件路径（只落盘，不回显）
 LOG_FILE="/var/log/install-spark.log"
-
-# >>> 2. 创建日志文件并立即重定向当前脚本所有输出
 mkdir -p "$(dirname "$LOG_FILE")"
-# 下面一行：既写文件又回显到终端
-exec > >(tee -a "$LOG_FILE") 2>&1
+exec > "$LOG_FILE" 2>&1          # <<< 关键变更：去掉tee，终端不再回显
 
-# >>> 3. 打时间戳
+# >>> 2. 打时间戳
 echo "======== $(date '+%F %T') install-spark.sh 开始执行 ========"
 
 echo "==== Step 1: 更新系统包 ===="
@@ -70,15 +67,18 @@ chown spark:spark /tmp/spark-events
 echo "==== 事件目录已创建并授权 ===="
 
 echo "==== Step 9: 配置 systemd 服务 ===="
+# Master 服务（简单模式，防闪退）
 cat >/etc/systemd/system/spark-master.service <<'EOF'
 [Unit]
 Description=Apache Spark Master
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 User=spark
 Group=spark
+Restart=always
+RestartSec=5
 ExecStart=/opt/spark/sbin/start-master.sh
 ExecStop=/opt/spark/sbin/stop-master.sh
 RemainAfterExit=yes
@@ -87,15 +87,18 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+# Worker 服务（simple + 内网地址）
 cat >/etc/systemd/system/spark-worker.service <<'EOF'
 [Unit]
 Description=Apache Spark Worker
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 User=spark
 Group=spark
+Restart=always
+RestartSec=5
 ExecStart=/opt/spark/sbin/start-worker.sh spark://$(hostname -I | awk '{print $1}'):7077
 ExecStop=/opt/spark/sbin/stop-worker.sh
 RemainAfterExit=yes
@@ -106,8 +109,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable spark-master spark-worker
-systemctl start spark-master
-systemctl start spark-worker
+systemctl restart spark-master spark-worker
 echo "==== Spark Master & Worker 服务已启动 ===="
 
 echo "==== Step 10: 验证启动 ===="
