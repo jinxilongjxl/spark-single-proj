@@ -57,10 +57,7 @@ resource "google_compute_instance" "spark_single" {
     access_config {
       nat_ip = google_compute_address.spark_ext_ip.address
     }
-    network_tier = "PREMIUM"
   }
-
-  tier_1_networking = true
 
   metadata_startup_script = file("${path.module}/scripts/install-spark.sh")
 
