@@ -26,7 +26,7 @@ else
 fi
 
 echo "==== Step 4: 下载并解压 Spark ===="
-wget -q https://archive.apache.org/dist/spark/spark-3.5.1/spark-3.5.1-bin-hadoop3.tgz -O /tmp/spark-3.5.1-bin-hadoop3.tgz
+wget --show-progress -q https://archive.apache.org/dist/spark/spark-3.5.1/spark-3.5.1-bin-hadoop3.tgz -O /tmp/spark-3.5.1-bin-hadoop3.tgz
 tar -xf /tmp/spark-3.5.1-bin-hadoop3.tgz -C /opt
 mv /opt/spark-3.5.1-bin-hadoop3 /opt/spark
 chown -R spark:spark /opt/spark
