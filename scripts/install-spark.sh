@@ -41,16 +41,20 @@ EOF
 source /etc/profile.d/spark.sh
 echo "==== Spark 环境变量已写入 /etc/profile.d/spark.sh ===="
 
+# 预解析Master主机IP（避免systemd环境变量解析失败）
+SPARK_MASTER_HOST=$(hostname -I | awk '{print $1}')
+echo "==== 预解析Master主机IP为 ${SPARK_MASTER_HOST} ===="
+
 echo "==== Step 6: 配置 Spark 默认环境（关键修复） ===="
 cat >/opt/spark/conf/spark-env.sh <<'EOF'
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-export SPARK_MASTER_HOST=$(hostname -I | awk '{print $1}')  # Master主机地址
+export SPARK_MASTER_HOST=$SPARK_MASTER_HOST  # Master主机地址（静态化后的值）
 export SPARK_MASTER_PORT=7077                             # Master端口
 export SPARK_MASTER_WEBUI_PORT=8080                       # Master WebUI端口
 export SPARK_MASTER_URL=spark://${SPARK_MASTER_HOST}:${SPARK_MASTER_PORT}  # 统一Master URL
 EOF
 chown spark:spark /opt/spark/conf/spark-env.sh
-echo "==== spark-env.sh 已生成（包含Master URL变量） ===="
+echo "==== spark-env.sh 已生成（包含静态Master IP和URL变量） ===="
 
 echo "==== Step 7: 配置 Spark Default Settings（清理冗余） ===="
 cat >/opt/spark/conf/spark-defaults.conf <<'EOF'
@@ -87,14 +91,14 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
-# Worker 服务（引用环境变量+依赖Master）
+# Worker 服务（修改Type为forking，适配Spark后台启动逻辑）
 cat >/etc/systemd/system/spark-worker.service <<'EOF'
 [Unit]
 Description=Apache Spark Worker
 After=network.target spark-master.service  # 依赖Master服务，确保Master先启动
 
 [Service]
-Type=simple
+Type=forking  # 改为forking，适配Spark后台启动脚本的运行机制
 User=spark
 Group=spark
 Restart=always
