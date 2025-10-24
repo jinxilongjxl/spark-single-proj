@@ -1,6 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
+# >>> 1. 日志文件路径
+LOG_FILE="/var/log/install-spark.log"
+
+# >>> 2. 创建日志文件并立即重定向当前脚本所有输出
+mkdir -p "$(dirname "$LOG_FILE")"
+# 下面一行：既写文件又回显到终端
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+# >>> 3. 打时间戳
+echo "======== $(date '+%F %T') install-spark.sh 开始执行 ========"
+
 echo "==== Step 1: 更新系统包 ===="
 apt-get update -y
 echo "==== 系统包更新完成 ===="
@@ -102,3 +113,5 @@ echo "==== Spark Master & Worker 服务已启动 ===="
 echo "==== Step 10: 验证启动 ===="
 systemctl status spark-master spark-worker --no-pager || true
 echo "==== Spark 单节点集群安装完成 ===="
+
+echo "======== $(date '+%F %T') install-spark.sh 执行结束 ========"
