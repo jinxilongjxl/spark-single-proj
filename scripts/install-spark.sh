@@ -4,7 +4,7 @@ set -euo pipefail
 # >>> 1. 日志文件路径（只落盘，不回显）
 LOG_FILE="/var/log/install-spark.log"
 mkdir -p "$(dirname "$LOG_FILE")"
-exec > "$LOG_FILE" 2>&1          # <<< 关键变更：去掉tee，终端不再回显
+exec > "$LOG_FILE" 2>&1
 
 # >>> 2. 打时间戳
 echo "======== $(date '+%F %T') install-spark.sh 开始执行 ========"
@@ -41,33 +41,33 @@ EOF
 source /etc/profile.d/spark.sh
 echo "==== Spark 环境变量已写入 /etc/profile.d/spark.sh ===="
 
-echo "==== Step 6: 配置 Spark 默认环境 ===="
+echo "==== Step 6: 配置 Spark 默认环境（关键修复） ===="
 cat >/opt/spark/conf/spark-env.sh <<'EOF'
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-export SPARK_MASTER_HOST=$(hostname -I | awk '{print $1}')
-export SPARK_MASTER_PORT=7077
-export SPARK_MASTER_WEBUI_PORT=8080
+export SPARK_MASTER_HOST=$(hostname -I | awk '{print $1}')  # Master主机地址
+export SPARK_MASTER_PORT=7077                             # Master端口
+export SPARK_MASTER_WEBUI_PORT=8080                       # Master WebUI端口
+export SPARK_MASTER_URL=spark://${SPARK_MASTER_HOST}:${SPARK_MASTER_PORT}  # 统一Master URL
 EOF
 chown spark:spark /opt/spark/conf/spark-env.sh
-echo "==== spark-env.sh 已生成 ===="
+echo "==== spark-env.sh 已生成（包含Master URL变量） ===="
 
-echo "==== Step 7: 配置 Spark Default Settings ===="
+echo "==== Step 7: 配置 Spark Default Settings（清理冗余） ===="
 cat >/opt/spark/conf/spark-defaults.conf <<'EOF'
-spark.master                     spark://$(hostname -I | awk '{print $1}'):7077
 spark.eventLog.enabled           true
 spark.eventLog.dir               /tmp/spark-events
 spark.history.fs.logDirectory    /tmp/spark-events
 EOF
 chown spark:spark /opt/spark/conf/spark-defaults.conf
-echo "==== spark-defaults.conf 已生成 ===="
+echo "==== spark-defaults.conf 已生成（移除冗余Master配置） ===="
 
 echo "==== Step 8: 创建 Spark 事件目录 ===="
 mkdir -p /tmp/spark-events
 chown spark:spark /tmp/spark-events
 echo "==== 事件目录已创建并授权 ===="
 
-echo "==== Step 9: 配置 systemd 服务 ===="
-# Master 服务（简单模式，防闪退）
+echo "==== Step 9: 配置 systemd 服务（关键修复） ===="
+# Master 服务
 cat >/etc/systemd/system/spark-master.service <<'EOF'
 [Unit]
 Description=Apache Spark Master
@@ -87,11 +87,11 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
-# Worker 服务（simple + 内网地址）
+# Worker 服务（引用环境变量+依赖Master）
 cat >/etc/systemd/system/spark-worker.service <<'EOF'
 [Unit]
 Description=Apache Spark Worker
-After=network.target
+After=network.target spark-master.service  # 依赖Master服务，确保Master先启动
 
 [Service]
 Type=simple
@@ -99,7 +99,8 @@ User=spark
 Group=spark
 Restart=always
 RestartSec=5
-ExecStart=/opt/spark/sbin/start-worker.sh spark://$(hostname -I | awk '{print $1}'):7077
+EnvironmentFile=/opt/spark/conf/spark-env.sh  # 加载环境变量
+ExecStart=/opt/spark/sbin/start-worker.sh $SPARK_MASTER_URL  # 引用预定义的Master URL
 ExecStop=/opt/spark/sbin/stop-worker.sh
 RemainAfterExit=yes
 
@@ -112,8 +113,16 @@ systemctl enable spark-master spark-worker
 systemctl restart spark-master spark-worker
 echo "==== Spark Master & Worker 服务已启动 ===="
 
-echo "==== Step 10: 验证启动 ===="
+echo "==== Step 10: 验证启动（增强验证） ===="
+echo "==== 服务状态检查 ===="
 systemctl status spark-master spark-worker --no-pager || true
-echo "==== Spark 单节点集群安装完成 ===="
 
+echo "==== 集群连通性测试 ===="
+# 以spark用户执行简单的Spark任务，验证集群可用性
+su - spark -c "spark-shell --master \$SPARK_MASTER_URL --executor-memory 512M --total-executor-cores 1 -e 'println(\"Spark集群连接成功！\"); sys.exit(0)'" || {
+  echo "==== 集群连通性测试失败，请检查日志 ===="
+  exit 1
+}
+
+echo "==== Spark 单节点集群安装完成 ===="
 echo "======== $(date '+%F %T') install-spark.sh 执行结束 ========"
