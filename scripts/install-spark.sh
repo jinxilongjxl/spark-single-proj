@@ -26,7 +26,7 @@ else
 fi
 
 echo "==== Step 4: 下载并解压 Spark ===="
-curl -s -o /tmp/spark-3.5.1-bin-hadoop3.tgz https://archive.apache.org/dist/spark/spark-3.5.1/spark-3.5.1-bin-hadoop3.tgz --progress-bar
+curl -s -o /tmp/spark-3.5.1-bin-hadoop3.tgz https://archive.apache.org/dist/spark/spark-3.5.1/spark-3.5.1-bin-hadoop3.tgz  --progress-bar
 tar -xf /tmp/spark-3.5.1-bin-hadoop3.tgz -C /opt
 mv /opt/spark-3.5.1-bin-hadoop3 /opt/spark
 chown -R spark:spark /opt/spark
@@ -46,12 +46,12 @@ SPARK_MASTER_HOST=$(hostname -I | awk '{print $1}')
 echo "==== 预解析Master主机IP为 ${SPARK_MASTER_HOST} ===="
 
 echo "==== Step 6: 配置 Spark 默认环境（关键修复） ===="
-cat >/opt/spark/conf/spark-env.sh <<'EOF'
+cat >/opt/spark/conf/spark-env.sh <<EOF
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-export SPARK_MASTER_HOST=$SPARK_MASTER_HOST  # Master主机地址（静态化后的值）
-export SPARK_MASTER_PORT=7077                             # Master端口
-export SPARK_MASTER_WEBUI_PORT=8080                       # Master WebUI端口
-export SPARK_MASTER_URL=spark://${SPARK_MASTER_HOST}:${SPARK_MASTER_PORT}  # 统一Master URL
+export SPARK_MASTER_HOST=${SPARK_MASTER_HOST}
+export SPARK_MASTER_PORT=7077
+export SPARK_MASTER_WEBUI_PORT=8080
+export SPARK_MASTER_URL=spark://${SPARK_MASTER_HOST}:7077
 EOF
 chown spark:spark /opt/spark/conf/spark-env.sh
 echo "==== spark-env.sh 已生成（包含静态Master IP和URL变量） ===="
@@ -71,7 +71,7 @@ chown spark:spark /tmp/spark-events
 echo "==== 事件目录已创建并授权 ===="
 
 echo "==== Step 9: 配置 systemd 服务（关键修复） ===="
-# Master 服务
+# Master 服务（保持原样）
 cat >/etc/systemd/system/spark-master.service <<'EOF'
 [Unit]
 Description=Apache Spark Master
@@ -91,20 +91,20 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
-# Worker 服务（修改Type为forking，适配Spark后台启动逻辑）
-cat >/etc/systemd/system/spark-worker.service <<'EOF'
+# Worker 服务：动态生成，避免硬编码
+SPARK_MASTER_URL="spark://${SPARK_MASTER_HOST}:7077"
+cat >/etc/systemd/system/spark-worker.service <<EOF
 [Unit]
 Description=Apache Spark Worker
-After=network.target spark-master.service  # 依赖Master服务，确保Master先启动
+After=network.target spark-master.service
 
 [Service]
-Type=forking  # 改为forking，适配Spark后台启动脚本的运行机制
+Type=forking
 User=spark
 Group=spark
 Restart=always
 RestartSec=5
-EnvironmentFile=/opt/spark/conf/spark-env.sh  # 加载环境变量
-ExecStart=/opt/spark/sbin/start-worker.sh $SPARK_MASTER_URL  # 引用预定义的Master URL
+ExecStart=/opt/spark/sbin/start-worker.sh ${SPARK_MASTER_URL}
 ExecStop=/opt/spark/sbin/stop-worker.sh
 RemainAfterExit=yes
 
