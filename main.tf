@@ -24,7 +24,7 @@ resource "google_compute_firewall" "spark_fw" {
 
   allow {
     protocol = "tcp"
-    ports    = ["22", "8080", "4040", "7077", "8081"]
+    ports    = ["22", "8080", "4040", "7077", "8081","9999"]
   }
 
   source_ranges = ["0.0.0.0/0"]
